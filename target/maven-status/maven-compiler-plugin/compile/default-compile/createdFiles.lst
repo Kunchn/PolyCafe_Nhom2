@@ -12,7 +12,6 @@ poly\cafe\ui\PolyCafeJFrame$3.class
 poly\cafe\util\XQuery.class
 poly\cafe\dao\impl\UserDAOImpl.class
 poly\cafe\util\XAuth.class
-poly\cafe\ui\PolyCafeJFrame$14.class
 poly\cafe\util\XDialog.class
 poly\cafe\ui\LoginJDialog$1.class
 poly\cafe\dao\UserDAO.class
@@ -34,7 +33,6 @@ poly\cafe\entity\Category$CategoryBuilder.class
 poly\cafe\ui\manager\DrinkManagerJDialog$17.class
 poly\cafe\util\XIcon.class
 poly\cafe\ui\manager\DrinkManagerJDialog$1.class
-poly\cafe\ui\PolyCafeJFrame$13.class
 poly\cafe\dao\DrinkDAO.class
 poly\cafe\ui\LoginJDialog$4$1.class
 poly\cafe\ui\LoginJDialog$3.class
@@ -50,12 +48,10 @@ poly\cafe\ui\PolyCafeJFrame.class
 poly\cafe\ui\manager\DrinkManagerJDialog$11.class
 poly\cafe\ui\manager\DrinkManagerJDialog$17$1.class
 poly\cafe\ui\PolyCafeJFrame$1.class
-poly\cafe\ui\PolyCafeJFrame$12.class
 poly\cafe\ui\PolyCafeJFrame$9.class
 poly\cafe\ui\WelcomeJDialog$1.class
 poly\cafe\ui\manager\DrinkManagerJDialog$16.class
 poly\cafe\dao\impl\DrinkDAOImpl.class
-poly\cafe\ui\PolyCafeJFrame$11.class
 poly\cafe\dao\impl\CategoryDAOImpl.class
 poly\cafe\ui\LoginJDialog$2.class
 poly\cafe\PolyCafe$1.class
