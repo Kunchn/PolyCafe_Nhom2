@@ -4,7 +4,19 @@
  */
 package poly.cafe.ui;
 
+import java.util.ArrayList;
+import java.util.List;
 import javax.swing.ImageIcon;
+import javax.swing.table.DefaultTableModel;
+import poly.cafe.dao.BillDAO;
+import poly.cafe.dao.BillDetailDAO;
+import poly.cafe.dao.DrinkDAO;
+import poly.cafe.dao.impl.BillDAOImpl;
+import poly.cafe.dao.impl.BillDetailDAOImpl;
+import poly.cafe.dao.impl.DrinkDAOImpl;
+import poly.cafe.entity.Bill;
+import poly.cafe.entity.BillDetail;
+import poly.cafe.entity.Drink;
 import poly.cafe.util.XAuth;
 import poly.cafe.util.XDialog;
 import poly.cafe.util.XIcon;
@@ -18,9 +30,152 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
     /**
      * Creates new form PolyCafeJFrame
      */
+    DrinkDAO drinkDAO = new DrinkDAOImpl();
+    BillDAO billDAO = new BillDAOImpl();
+    BillDetailDAO billDetailDAO = new BillDetailDAOImpl();
+
+    // Danh sách để lưu trữ các món hàng trong hóa đơn đang được tạo (hóa đơn tạm thời)
+    List<BillDetail> currentOrderDetails = new ArrayList<>();
+
+    // Hóa đơn đang được chọn từ bảng "Hóa đơn chờ"
+    Bill selectedBill = null;
+    
+    // --- KẾT THÚC PHẦN KHAI BÁO MỚI ---
     public PolyCafeJFrame() {
         initComponents();
         this.init();    
+    }
+    
+    /**
+ * Tải danh sách sản phẩm từ CSDL và hiển thị động lên pnlProductListDisplay.
+ */
+    /**
+ * Tạo một JPanel đại diện cho một ô sản phẩm để hiển thị.
+ * @param drink Đối tượng Drink chứa thông tin sản phẩm.
+ * @return Một JPanel đã được thiết kế hoàn chỉnh.
+ */
+    private javax.swing.JPanel createProductPanel(final Drink drink) {
+        // Panel chính cho một sản phẩm
+        javax.swing.JPanel panel = new javax.swing.JPanel();
+        panel.setLayout(new javax.swing.BoxLayout(panel, javax.swing.BoxLayout.Y_AXIS)); // Xếp dọc
+        panel.setBorder(javax.swing.BorderFactory.createEtchedBorder());
+        panel.setPreferredSize(new java.awt.Dimension(180, 240)); // Kích thước cố định cho mỗi ô
+        panel.setMaximumSize(new java.awt.Dimension(180, 240));
+        panel.setBackground(java.awt.Color.WHITE);
+
+        // JLabel hiển thị ảnh
+        javax.swing.JLabel lblImage = new javax.swing.JLabel();
+        lblImage.setAlignmentX(java.awt.Component.CENTER_ALIGNMENT);
+        lblImage.setPreferredSize(new java.awt.Dimension(160, 120));
+        ImageIcon icon = XIcon.getIcon(drink.getImage()); // Lấy icon từ tên file ảnh
+        if (icon != null) {
+            // Scale ảnh cho vừa với JLabel
+            java.awt.Image scaledImage = icon.getImage().getScaledInstance(160, 120, java.awt.Image.SCALE_SMOOTH);
+            lblImage.setIcon(new ImageIcon(scaledImage));
+        } else {
+            lblImage.setText("No Image");
+        }
+
+        // JLabel hiển thị tên (dùng html để tự xuống dòng nếu tên quá dài)
+        javax.swing.JLabel lblName = new javax.swing.JLabel("<html><center>" + drink.getName() + "</center></html>");
+        lblName.setAlignmentX(java.awt.Component.CENTER_ALIGNMENT);
+
+        // JLabel hiển thị giá
+        javax.swing.JLabel lblPrice = new javax.swing.JLabel(String.format("%,.0f VNĐ", drink.getUnitPrice()));
+        lblPrice.setAlignmentX(java.awt.Component.CENTER_ALIGNMENT);
+        lblPrice.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 14));
+        lblPrice.setForeground(java.awt.Color.RED);
+
+        // Panel nhỏ chứa các control số lượng
+        javax.swing.JPanel qtyPanel = new javax.swing.JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.CENTER, 5, 2));
+        qtyPanel.setOpaque(false); // Làm trong suốt để lấy màu nền của panel cha
+        javax.swing.JButton btnMinus = new javax.swing.JButton("-");
+        javax.swing.JTextField txtQty = new javax.swing.JTextField("1", 3); // Ô số lượng, rộng 3 ký tự
+        txtQty.setHorizontalAlignment(javax.swing.JTextField.CENTER);
+        txtQty.setEditable(false);
+        javax.swing.JButton btnPlus = new javax.swing.JButton("+");
+
+        // Xử lý sự kiện cho nút trừ (-)
+        btnMinus.addActionListener(e -> {
+            try {
+                int qty = Integer.parseInt(txtQty.getText());
+                if (qty > 1) { // Số lượng không thể nhỏ hơn 1
+                    txtQty.setText(String.valueOf(qty - 1));
+                }
+            } catch (NumberFormatException ex) {
+                txtQty.setText("1");
+            }
+        });
+
+        // Xử lý sự kiện cho nút cộng (+)
+        btnPlus.addActionListener(e -> {
+            try {
+                int qty = Integer.parseInt(txtQty.getText());
+                txtQty.setText(String.valueOf(qty + 1)); // Tăng số lượng
+            } catch (NumberFormatException ex) {
+                txtQty.setText("1");
+            }
+        });
+
+        // Thêm các nút +/- và ô số lượng vào panel nhỏ
+        qtyPanel.add(btnMinus);
+        qtyPanel.add(txtQty);
+        qtyPanel.add(btnPlus);
+
+        // Nút "Thêm vào hóa đơn" (kích hoạt logic thêm sản phẩm)
+        // Thay vì dùng nút riêng, chúng ta sẽ làm cho toàn bộ panel có thể click được.
+        // Hoặc, đơn giản hơn là dùng sự kiện của nút "+"
+        // Khi người dùng nhấn "+", nó sẽ vừa tăng số lượng, vừa có thể được hiểu là thêm vào giỏ hàng.
+        // Để rõ ràng, chúng ta sẽ xử lý việc thêm vào giỏ hàng khi người dùng click vào chính panel sản phẩm.
+        panel.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                // Đây là nơi logic thêm sản phẩm vào hóa đơn hiện tại sẽ được gọi
+                int quantity = Integer.parseInt(txtQty.getText());
+                addProductToCurrentOrder(drink, quantity); // Sẽ triển khai phương thức này ở bước sau
+                txtQty.setText("1"); // Reset số lượng về 1 sau khi thêm
+            }
+        });
+
+        // Thêm các component vào panel chính theo thứ tự
+        panel.add(javax.swing.Box.createRigidArea(new java.awt.Dimension(0, 5))); // Khoảng đệm
+        panel.add(lblImage);
+        panel.add(javax.swing.Box.createRigidArea(new java.awt.Dimension(0, 5)));
+        panel.add(lblName);
+        panel.add(lblPrice);
+        panel.add(qtyPanel);
+        panel.add(javax.swing.Box.createRigidArea(new java.awt.Dimension(0, 5)));
+
+        return panel;
+    }
+
+
+    private void fillProductList() {
+        // Đặt layout cho panel chứa sản phẩm. GridLayout là một lựa chọn tốt để tạo lưới.
+        // (số hàng, số cột, khoảng cách ngang, khoảng cách dọc)
+        // Đặt số hàng là 0 để nó tự động thêm hàng mới khi cần.
+        pnlProductListDisplay.setLayout(new java.awt.GridLayout(0, 4, 10, 10));
+
+        pnlProductListDisplay.removeAll(); // Xóa các sản phẩm mẫu đã thiết kế (nếu có)
+
+        try {
+            List<Drink> allDrinks = drinkDAO.findAll(); // Lấy tất cả đồ uống từ CSDL
+            for (Drink drink : allDrinks) {
+                // Chỉ hiển thị các sản phẩm có sẵn để bán
+                if (drink.isAvailable()) {
+                    // Gọi một phương thức trợ giúp để tạo một panel cho mỗi sản phẩm
+                    javax.swing.JPanel productPanel = createProductPanel(drink);
+                    pnlProductListDisplay.add(productPanel);
+                }
+            }
+        } catch (Exception e) {
+            XDialog.alert("Lỗi tải danh sách sản phẩm!", "Lỗi");
+            e.printStackTrace();
+        }
+
+        // Cập nhật lại giao diện để hiển thị các panel sản phẩm mới
+        pnlProductListDisplay.revalidate();
+        pnlProductListDisplay.repaint();
     }
 
     /**
@@ -35,7 +190,7 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
         pnlMenuLeft = new javax.swing.JPanel();
         lblFullname = new javax.swing.JLabel();
         lblPhoto = new javax.swing.JLabel();
-        btnSales = new javax.swing.JButton();
+        btnBanHang = new javax.swing.JButton();
         btnTrangChu = new javax.swing.JButton();
         btnQuanLySP = new javax.swing.JButton();
         btnQuanLyHD = new javax.swing.JButton();
@@ -43,7 +198,7 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
         btnThongKe = new javax.swing.JButton();
         pnlCurrentBillInfo = new javax.swing.JPanel();
         jScrollPane1 = new javax.swing.JScrollPane();
-        jTable1 = new javax.swing.JTable();
+        tblCurrentBillDetails = new javax.swing.JTable();
         jLabel1 = new javax.swing.JLabel();
         lblCurrentBillId = new javax.swing.JLabel();
         jLabel2 = new javax.swing.JLabel();
@@ -82,7 +237,7 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
         btnProductItem1Minus2 = new javax.swing.JButton();
         btnProductItem1Plus2 = new javax.swing.JButton();
         txtProductItem1Quantity2 = new javax.swing.JLabel();
-        jLabel6 = new javax.swing.JLabel();
+        btnCreateNewBill = new javax.swing.JButton();
         pnlPendingBills = new javax.swing.JPanel();
         jLabel4 = new javax.swing.JLabel();
         jScrollPane2 = new javax.swing.JScrollPane();
@@ -98,6 +253,7 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
         txtFinalTotal = new javax.swing.JLabel();
         jLabel14 = new javax.swing.JLabel();
         btnProcessPayment = new javax.swing.JButton();
+        jLabel6 = new javax.swing.JLabel();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         setTitle("Poly Cafe");
@@ -109,19 +265,20 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
 
         lblFullname.setFont(new java.awt.Font("Segoe UI", 0, 18)); // NOI18N
         lblFullname.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
-        lblFullname.setText("Họ Tên User");
-        pnlMenuLeft.add(lblFullname, new org.netbeans.lib.awtextra.AbsoluteConstraints(100, 50, -1, -1));
+        lblFullname.setText("Admin");
+        pnlMenuLeft.add(lblFullname, new org.netbeans.lib.awtextra.AbsoluteConstraints(130, 50, -1, -1));
 
+        lblPhoto.setIcon(new javax.swing.ImageIcon(getClass().getResource("/poly/cafe/icons/trump-small.png"))); // NOI18N
         lblPhoto.setText("Ảnh User");
         pnlMenuLeft.add(lblPhoto, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 20, 80, 80));
 
-        btnSales.setText("Bán hàng");
-        btnSales.addActionListener(new java.awt.event.ActionListener() {
+        btnBanHang.setText("Bán hàng");
+        btnBanHang.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                btnSalesActionPerformed(evt);
+                btnBanHangActionPerformed(evt);
             }
         });
-        pnlMenuLeft.add(btnSales, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 190, 170, 40));
+        pnlMenuLeft.add(btnBanHang, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 190, 170, 40));
 
         btnTrangChu.setText("Trang chủ");
         pnlMenuLeft.add(btnTrangChu, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 130, 170, 40));
@@ -138,11 +295,11 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
         btnThongKe.setText("Thống kê");
         pnlMenuLeft.add(btnThongKe, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 420, 170, 40));
 
-        getContentPane().add(pnlMenuLeft, new org.netbeans.lib.awtextra.AbsoluteConstraints(0, 0, 210, 610));
+        getContentPane().add(pnlMenuLeft, new org.netbeans.lib.awtextra.AbsoluteConstraints(0, 0, 210, 640));
 
         pnlCurrentBillInfo.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
 
-        jTable1.setModel(new javax.swing.table.DefaultTableModel(
+        tblCurrentBillDetails.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
 
             },
@@ -150,7 +307,7 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
                 "Tên", "Giá", "Số lượng"
             }
         ));
-        jScrollPane1.setViewportView(jTable1);
+        jScrollPane1.setViewportView(tblCurrentBillDetails);
 
         jLabel1.setText("Mã HĐ:");
 
@@ -184,7 +341,7 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
                                 .addGroup(pnlCurrentBillInfoLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                                     .addComponent(jLabel1)
                                     .addComponent(jLabel2))
-                                .addGap(0, 142, Short.MAX_VALUE)))))
+                                .addGap(0, 0, Short.MAX_VALUE)))))
                 .addContainerGap())
         );
         pnlCurrentBillInfoLayout.setVerticalGroup(
@@ -210,11 +367,11 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
 
         getContentPane().add(pnlCurrentBillInfo, new org.netbeans.lib.awtextra.AbsoluteConstraints(210, 0, 500, 290));
 
-        pnlProductListDisplay.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
         pnlProductListDisplay.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
 
         pnlProductItem1.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
 
+        lblProductItem1Image.setIcon(new javax.swing.ImageIcon(getClass().getResource("/poly/cafe/icons/banhmi2.png"))); // NOI18N
         lblProductItem1Image.setText("jLabel6");
         lblProductItem1Image.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
 
@@ -299,12 +456,13 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
 
         pnlProductItem2.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
 
+        lblProductItem2Image.setIcon(new javax.swing.ImageIcon(getClass().getResource("/poly/cafe/icons/nuocchanh.png"))); // NOI18N
         lblProductItem2Image.setText("jLabel6");
         lblProductItem2Image.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
 
-        lblProductItem2Price.setText("jLabel13");
+        lblProductItem2Price.setText("15.000 vnd");
 
-        lblProductItem2Name.setText("jLabel12");
+        lblProductItem2Name.setText("Nước chanh");
 
         btnProductItem1Minus1.setText("-");
         btnProductItem1Minus1.addActionListener(new java.awt.event.ActionListener() {
@@ -383,12 +541,13 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
 
         pnlProductItem4.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
 
+        lblProductItem4Image.setIcon(new javax.swing.ImageIcon(getClass().getResource("/poly/cafe/icons/caphe1.png"))); // NOI18N
         lblProductItem4Image.setText("jLabel6");
         lblProductItem4Image.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
 
-        lblProductItem4Name.setText("jLabel12");
+        lblProductItem4Name.setText("Cà phê");
 
-        lblProductItem4Price.setText("jLabel13");
+        lblProductItem4Price.setText("25.000 vn");
 
         btnProductItem1Minus4.setText("-");
         btnProductItem1Minus4.addActionListener(new java.awt.event.ActionListener() {
@@ -420,10 +579,11 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
         jPanel6Layout.setVerticalGroup(
             jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel6Layout.createSequentialGroup()
-                .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(btnProductItem1Minus4)
-                    .addComponent(btnProductItem1Plus4)
-                    .addComponent(txtProductItem1Quantity4, javax.swing.GroupLayout.PREFERRED_SIZE, 23, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(txtProductItem1Quantity4, javax.swing.GroupLayout.PREFERRED_SIZE, 23, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                        .addComponent(btnProductItem1Minus4)
+                        .addComponent(btnProductItem1Plus4)))
                 .addGap(0, 30, Short.MAX_VALUE))
         );
 
@@ -460,12 +620,13 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
 
         pnlProductItem3.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
 
+        lblProductItem3Image.setIcon(new javax.swing.ImageIcon(getClass().getResource("/poly/cafe/icons/tradao1.png"))); // NOI18N
         lblProductItem3Image.setText("jLabel6");
         lblProductItem3Image.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
 
-        lblProductItem3Price.setText("jLabel13");
+        lblProductItem3Price.setText("15.000 vnd");
 
-        lblProductItem3Name.setText("jLabel12");
+        lblProductItem3Name.setText("Trà đào");
 
         btnProductItem1Minus2.setText("-");
         btnProductItem1Minus2.addActionListener(new java.awt.event.ActionListener() {
@@ -497,10 +658,11 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
         jPanel4Layout.setVerticalGroup(
             jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel4Layout.createSequentialGroup()
-                .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(btnProductItem1Minus2)
-                    .addComponent(btnProductItem1Plus2)
-                    .addComponent(txtProductItem1Quantity2, javax.swing.GroupLayout.PREFERRED_SIZE, 23, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(txtProductItem1Quantity2, javax.swing.GroupLayout.PREFERRED_SIZE, 23, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                        .addComponent(btnProductItem1Minus2)
+                        .addComponent(btnProductItem1Plus2)))
                 .addGap(0, 0, Short.MAX_VALUE))
         );
 
@@ -536,11 +698,15 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
 
         pnlProductListDisplay.add(pnlProductItem3, new org.netbeans.lib.awtextra.AbsoluteConstraints(0, 170, 230, 130));
 
-        jLabel6.setFont(new java.awt.Font("Segoe UI", 1, 18)); // NOI18N
-        jLabel6.setText("Danh sách sản phẩm");
-        pnlProductListDisplay.add(jLabel6, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 10, -1, 20));
+        btnCreateNewBill.setText("Tạo Hóa Đơn");
+        btnCreateNewBill.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnCreateNewBillActionPerformed(evt);
+            }
+        });
+        pnlProductListDisplay.add(btnCreateNewBill, new org.netbeans.lib.awtextra.AbsoluteConstraints(350, 0, -1, 30));
 
-        getContentPane().add(pnlProductListDisplay, new org.netbeans.lib.awtextra.AbsoluteConstraints(210, 290, 470, 320));
+        getContentPane().add(pnlProductListDisplay, new org.netbeans.lib.awtextra.AbsoluteConstraints(210, 330, 470, 290));
 
         pnlPendingBills.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
 
@@ -658,17 +824,21 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
                 .addComponent(txtFinalTotal, javax.swing.GroupLayout.PREFERRED_SIZE, 19, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addGap(18, 18, 18)
                 .addComponent(btnProcessPayment, javax.swing.GroupLayout.PREFERRED_SIZE, 44, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(24, Short.MAX_VALUE))
+                .addContainerGap(74, Short.MAX_VALUE))
         );
 
-        getContentPane().add(pnlPaymentInfo, new org.netbeans.lib.awtextra.AbsoluteConstraints(680, 290, 290, 320));
+        getContentPane().add(pnlPaymentInfo, new org.netbeans.lib.awtextra.AbsoluteConstraints(680, 290, 290, 370));
+
+        jLabel6.setFont(new java.awt.Font("Segoe UI", 1, 18)); // NOI18N
+        jLabel6.setText("Danh sách sản phẩm");
+        getContentPane().add(jLabel6, new org.netbeans.lib.awtextra.AbsoluteConstraints(220, 300, -1, 20));
 
         pack();
     }// </editor-fold>//GEN-END:initComponents
 
-    private void btnSalesActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnSalesActionPerformed
+    private void btnBanHangActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnBanHangActionPerformed
         // TODO add your handling code here:
-    }//GEN-LAST:event_btnSalesActionPerformed
+    }//GEN-LAST:event_btnBanHangActionPerformed
 
     private void btnProductItem1MinusActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnProductItem1MinusActionPerformed
         // TODO add your handling code here:
@@ -702,6 +872,68 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
         // TODO add your handling code here:
     }//GEN-LAST:event_btnProductItem1Plus4ActionPerformed
 
+    private void btnCreateNewBillActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnCreateNewBillActionPerformed
+        // TODO add your handling code here:
+    }//GEN-LAST:event_btnCreateNewBillActionPerformed
+    
+    private void addProductToCurrentOrder(Drink drink, int quantity) {
+    for (BillDetail detail : currentOrderDetails) {
+            if (detail.getDrinkId().equals(drink.getId())) {
+                // Nếu đã có, chỉ cần cập nhật lại số lượng
+                detail.setQuantity(detail.getQuantity() + quantity);
+                updateCurrentOrderTable(); // Cập nhật lại bảng và thành tiền
+                return; // Kết thúc phương thức
+            }
+        }
+
+        // Nếu chưa có, tạo một BillDetail mới và thêm vào danh sách
+        BillDetail newDetail = BillDetail.builder()
+                .drinkId(drink.getId())
+                .unitPrice(drink.getUnitPrice())
+                .discount(drink.getDiscount()) // discount kiểu int
+                .quantity(quantity)
+                // billId sẽ được gán sau khi hóa đơn được tạo
+                .build();
+
+        currentOrderDetails.add(newDetail);
+        updateCurrentOrderTable(); // Cập nhật lại bảng và thành tiền
+    }
+
+        /**
+     * Cập nhật lại bảng tblCurrentBillDetails và tính tổng thành tiền
+     * từ danh sách hóa đơn tạm thời currentOrderDetails.
+     */
+    private void updateCurrentOrderTable() {
+        DefaultTableModel model = (DefaultTableModel) tblCurrentBillDetails.getModel();
+        model.setRowCount(0); // Xóa tất cả các dòng cũ trong bảng
+
+        double totalAmount = 0;
+
+        for (BillDetail detail : currentOrderDetails) {
+            // Cần lấy tên đồ uống từ DrinkDAO
+            Drink drink = drinkDAO.findById(detail.getDrinkId());
+            String drinkName = (drink != null) ? drink.getName() : "Sản phẩm không xác định";
+            
+            double price = detail.getUnitPrice();
+            int quantity = detail.getQuantity();
+            // Vì discount là int (ví dụ: 10 cho 10%), ta phải chia cho 100.0 khi tính toán
+            double discountRate = (double) detail.getDiscount() / 100.0;
+            
+            double lineTotal = price * quantity * (1 - discountRate);
+            totalAmount += lineTotal;
+
+            // Thêm dòng mới vào bảng
+            model.addRow(new Object[]{
+                drinkName,
+                String.format("%,.0f", price),
+                quantity
+            });
+        }
+
+        // Cập nhật lại tổng tiền trên giao diện
+        lblCurrentBillTotal.setText(String.format("%,.0f VNĐ", totalAmount));
+    }
+    
     /**
      * @param args the command line arguments
      */
@@ -738,6 +970,8 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JButton btnBanHang;
+    private javax.swing.JButton btnCreateNewBill;
     private javax.swing.JButton btnProcessPayment;
     private javax.swing.JButton btnProductItem1Minus;
     private javax.swing.JButton btnProductItem1Minus1;
@@ -750,7 +984,6 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
     private javax.swing.JButton btnQuanLyHD;
     private javax.swing.JButton btnQuanLyNV;
     private javax.swing.JButton btnQuanLySP;
-    private javax.swing.JButton btnSales;
     private javax.swing.JButton btnThongKe;
     private javax.swing.JButton btnTrangChu;
     private javax.swing.JLabel jLabel1;
@@ -769,7 +1002,6 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
     private javax.swing.JPanel jPanel6;
     private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JScrollPane jScrollPane2;
-    private javax.swing.JTable jTable1;
     private javax.swing.JLabel lblCurrentBillId;
     private javax.swing.JLabel lblCurrentBillTotal;
     private javax.swing.JLabel lblFullname;
@@ -795,6 +1027,7 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
     private javax.swing.JPanel pnlProductItem3;
     private javax.swing.JPanel pnlProductItem4;
     private javax.swing.JPanel pnlProductListDisplay;
+    private javax.swing.JTable tblCurrentBillDetails;
     private javax.swing.JTable tblPendingBills;
     private javax.swing.JLabel txtCustomerName;
     private javax.swing.JLabel txtCustomerPhone;
@@ -806,64 +1039,113 @@ public class PolyCafeJFrame extends javax.swing.JFrame implements PolyCafeContro
     private javax.swing.JLabel txtProductItem1Quantity4;
     // End of variables declaration//GEN-END:variables
 
+    // Đặt đoạn code này bên trong lớp PolyCafeJFrame.java của bạn
+
     @Override
     public void init() {
-        this.setIconImage(XIcon.getIcon("trump-small.png").getImage());
+        // ----- BƯỚC 1: CÀI ĐẶT CƠ BẢN CHO CỬA SỔ -----
+        // Đặt icon cho ứng dụng
+        // Đảm bảo bạn có file 'logo_app.png' (hoặc tên tương ứng) trong thư mục resources/poly/cafe/icons/
+        ImageIcon appIcon = XIcon.getIcon("logo_app.png");
+        if (appIcon != null) {
+            this.setIconImage(appIcon.getImage());
+        }
 
-        // Đặt JFrame ra giữa màn hình (đã làm ở phần Người 1)
+        // Đặt JFrame ra giữa màn hình
         this.setLocationRelativeTo(null);
 
-        // Hiển thị cửa sổ chào (WelcomeJDialog)
-        this.showWelcomeJDialog(this); // WelcomeJDialog sẽ đóng lại trước khi LoginJDialog hiển thị
+        // ----- BƯỚC 2: QUÁ TRÌNH CHÀO VÀ ĐĂNG NHẬP (MODAL) -----
+        // Các dialog này là modal, nghĩa là code sẽ dừng ở mỗi dòng cho đến khi dialog tương ứng được đóng.
+        this.showWelcomeJDialog(this); // Hiển thị màn hình chào
+        this.showLoginJDialog(this);   // Sau khi màn hình chào đóng, hiển thị màn hình đăng nhập
 
-        // Hiển thị cửa sổ đăng nhập (LoginJDialog)
-        this.showLoginJDialog(this); // LoginJDialog sẽ đóng lại sau khi đăng nhập thành công
+        // ----- BƯỚC 3: XỬ LÝ SAU KHI ĐĂNG NHẬP -----
+        // Code ở đây chỉ chạy sau khi màn hình đăng nhập đã đóng.
+        if (XAuth.isLogin()) {
+            // A. CẬP NHẬT GIAO DIỆN VỚI THÔNG TIN NGƯỜI DÙNG
+            updateUserInfo();
 
-        // ----- PHẦN MỚI THÊM BẮT ĐẦU TỪ ĐÂY -----
-        // Sau khi LoginJDialog đóng (nghĩa là đăng nhập đã xong hoặc bị hủy),
-        // kiểm tra xem người dùng đã đăng nhập thành công chưa (XAuth.user đã được cập nhật)
-        if (XAuth.isLogin()) { // Sử dụng phương thức isLogin() từ XAuth
-            // Hiển thị họ tên người dùng
-            if (lblFullname != null) { // Kiểm tra null để tránh lỗi nếu JLabel chưa được kéo vào form
-                lblFullname.setText(XAuth.user.getFullname());
-            }
+            // B. PHÂN QUYỀN TRUY CẬP CHỨC NĂNG
+            applyUserRoles();
 
-            // Hiển thị ảnh đại diện người dùng
-            if (lblPhoto != null && XAuth.user.getPhoto() != null && !XAuth.user.getPhoto().isBlank()) {
-                // Giả sử ảnh nằm trong thư mục "photos" bên trong "icons"
-                // Hoặc bạn có thể chỉ cần XIcon.getIcon(XAuth.user.getPhoto()) nếu ảnh nằm trực tiếp trong icons
-                // Tạm thời, chúng ta sẽ dùng XIcon.setIcon để nó tự scale.
-                // Đường dẫn "photos/" là ví dụ từ lab, bạn cần đảm bảo file ảnh người dùng
-                // (ví dụ: "trump.png", "admin.png") nằm trong thư mục resources/poly/cafe/icons/photos/
-                // HOẶC resources/poly/cafe/icons/ tùy theo cách bạn lưu trữ và XIcon xử lý.
-                // Để đơn giản, giả sử ảnh nằm trong icons:
-                XIcon.setIcon(lblPhoto, XAuth.user.getPhoto()); // lblPhoto là JLabel trên form
-            } else if (lblPhoto != null) {
-                lblPhoto.setIcon(null); // Xóa ảnh nếu không có
-                lblPhoto.setText("No Photo");
-            }
-
-            // Phân quyền: Vô hiệu hóa các nút quản lý nếu không phải là Manager
-            // (Giả sử bạn có các nút btnDrinkManager, btnCategoryManager, v.v. đã được khai báo
-            // và thêm vào giao diện ở phần Người 1)
-            boolean isManager = XAuth.isManager(); // Sử dụng phương thức isManager() từ XAuth
-
-            
-
-            // Các nút chức năng chung như "Bán Hàng", "Lịch Sử", "Đổi Mật Khẩu", "Kết Thúc"
-            // thường sẽ luôn được bật cho cả hai vai trò (tùy theo yêu cầu dự án).
-            // Ví dụ:
-            // if (btnSales != null) btnSales.setEnabled(true);
-            // if (btnHistory != null) btnHistory.setEnabled(true);
-            // if (btnChangePassword != null) btnChangePassword.setEnabled(true);
-            // if (btnExit != null) btnExit.setEnabled(true);
+            // C. TẢI DỮ LIỆU BAN ĐẦU CHO GIAO DIỆN BÁN HÀNG
+            fillProductList();      // Tải và hiển thị danh sách sản phẩm
+            fillPendingBills();     // Tải và hiển thị danh sách hóa đơn chờ
+            clearCurrentOrder();    // Chuẩn bị cho hóa đơn mới
 
         } else {
-            // Nếu người dùng không đăng nhập (ví dụ: đóng LoginJDialog mà không login)
-            // Có thể thoát ứng dụng hoặc hiển thị thông báo và yêu cầu đăng nhập lại.
-            // Để đơn giản, hiện tại chúng ta có thể thoát.
-            XDialog.alert("Bạn chưa đăng nhập. Ứng dụng sẽ thoát.", "Thông báo");
+            // Nếu người dùng đóng cửa sổ đăng nhập mà không đăng nhập
+            XDialog.alert("Bạn chưa đăng nhập. Ứng dụng sẽ thoát.", "Lỗi");
             System.exit(0);
         }
     }
+
+    /**
+     * Cập nhật thông tin người dùng (ảnh đại diện, tên) trên menu trái.
+     */
+    private void updateUserInfo() {
+        if (lblFullname != null) {
+            lblFullname.setText(XAuth.user.getFullname());
+        }
+        if (lblPhoto != null) {
+            // Dùng XIcon.setIcon để tự động scale ảnh cho vừa JLabel
+            XIcon.setIcon(lblPhoto, XAuth.user.getPhoto());
+        }
+    }
+
+    /**
+     * Áp dụng phân quyền: Bật/tắt các nút chức năng dựa trên vai trò người dùng.
+     */
+    private void applyUserRoles() {
+        boolean isManager = XAuth.isManager();
+        // Các nút quản lý chỉ dành cho người có vai trò Manager
+        if (btnQuanLySP != null) btnQuanLySP.setEnabled(isManager);
+        if (btnQuanLyHD != null) btnQuanLyHD.setEnabled(isManager);
+        if (btnQuanLyNV != null) btnQuanLyNV.setEnabled(isManager);
+        if (btnThongKe != null) btnThongKe.setEnabled(isManager);
+
+        // Các nút khác như "Trang chủ", "Bán hàng" có thể luôn được bật
+        if (btnTrangChu != null) btnTrangChu.setEnabled(true);
+        if (btnBanHang != null) btnBanHang.setEnabled(true);
+    }
+
+    /**
+     * Tải danh sách các hóa đơn đang ở trạng thái chờ (status = 0) và hiển thị lên bảng tblPendingBills.
+     */
+    private void fillPendingBills() {
+        DefaultTableModel model = (DefaultTableModel) tblPendingBills.getModel();
+        model.setRowCount(0); // Xóa dữ liệu cũ
+
+        try {
+            // Giả sử trạng thái "Chờ" có giá trị là 0 trong CSDL
+            List<Bill> pendingBills = billDAO.findByStatus(0); 
+            int stt = 1;
+            for (Bill bill : pendingBills) {
+                model.addRow(new Object[]{
+                    stt++,
+                    "HD" + bill.getId(), // Hiển thị mã hóa đơn
+                    "Chờ" // Trạng thái
+                });
+            }
+        } catch (Exception e) {
+            XDialog.alert("Lỗi tải danh sách hóa đơn chờ!", "Lỗi");
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Xóa trắng và reset khu vực thông tin hóa đơn hiện tại để chuẩn bị cho một đơn hàng mới.
+     */
+    private void clearCurrentOrder() {
+        currentOrderDetails.clear(); // Xóa tất cả các món trong giỏ hàng tạm thời
+        updateCurrentOrderTable();   // Cập nhật lại bảng chi tiết hóa đơn (sẽ trở nên trống)
+        lblCurrentBillId.setText("..."); // Reset mã hóa đơn
+
+        // Reset thông tin thanh toán
+        txtCustomerName.setText("");
+        txtCustomerPhone.setText("");
+        txtDiscountCode.setText("");
+        txtFinalTotal.setText("0 VNĐ");
+    }
+
 }

@@ -32,6 +32,10 @@ public interface PolyCafeController {
             System.exit(0); // [cite: 127]
         }
     }
+    
+    default void showSalesView() {
+        new poly.cafe.ui.sales.SalesView().setVisible(true);
+    }
 
     default void showJDialog(JDialog dialog) { // [cite: 127]
         dialog.setLocationRelativeTo(null); // [cite: 127]

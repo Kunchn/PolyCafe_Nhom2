@@ -1,10 +1,16 @@
+C:\java\PolyCafe\src\main\java\poly\cafe\dao\BillDAO.java
+C:\java\PolyCafe\src\main\java\poly\cafe\dao\BillDetailDAO.java
 C:\java\PolyCafe\src\main\java\poly\cafe\dao\CategoryDAO.java
 C:\java\PolyCafe\src\main\java\poly\cafe\dao\CrudDAO.java
 C:\java\PolyCafe\src\main\java\poly\cafe\dao\DrinkDAO.java
+C:\java\PolyCafe\src\main\java\poly\cafe\dao\impl\BillDAOImpl.java
+C:\java\PolyCafe\src\main\java\poly\cafe\dao\impl\BillDetailDAOImpl.java
 C:\java\PolyCafe\src\main\java\poly\cafe\dao\impl\CategoryDAOImpl.java
 C:\java\PolyCafe\src\main\java\poly\cafe\dao\impl\DrinkDAOImpl.java
 C:\java\PolyCafe\src\main\java\poly\cafe\dao\impl\UserDAOImpl.java
 C:\java\PolyCafe\src\main\java\poly\cafe\dao\UserDAO.java
+C:\java\PolyCafe\src\main\java\poly\cafe\entity\Bill.java
+C:\java\PolyCafe\src\main\java\poly\cafe\entity\BillDetail.java
 C:\java\PolyCafe\src\main\java\poly\cafe\entity\Category.java
 C:\java\PolyCafe\src\main\java\poly\cafe\entity\Drink.java
 C:\java\PolyCafe\src\main\java\poly\cafe\entity\User.java
@@ -16,6 +22,7 @@ C:\java\PolyCafe\src\main\java\poly\cafe\ui\manager\DrinkController.java
 C:\java\PolyCafe\src\main\java\poly\cafe\ui\manager\DrinkManagerJDialog.java
 C:\java\PolyCafe\src\main\java\poly\cafe\ui\PolyCafeController.java
 C:\java\PolyCafe\src\main\java\poly\cafe\ui\PolyCafeJFrame.java
+C:\java\PolyCafe\src\main\java\poly\cafe\ui\sales\SalesView.java
 C:\java\PolyCafe\src\main\java\poly\cafe\ui\WelcomeController.java
 C:\java\PolyCafe\src\main\java\poly\cafe\ui\WelcomeJDialog.java
 C:\java\PolyCafe\src\main\java\poly\cafe\util\TimeRange.java
